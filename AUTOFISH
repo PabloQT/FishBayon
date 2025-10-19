@@ -1,0 +1,305 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Bayon Hangout Auto Script by Pablo",
+   Icon = 0,
+   LoadingTitle = "Loading Bayon Hangout Tools",
+   LoadingSubtitle = "Created by Pablo",
+   Theme = "Amethyst",
+   ToggleUIKeybind = "K",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "BayonHangout",
+      FileName = "AutoFishSettings"
+   }
+})
+
+------------------------------------------------------------
+-- 🐟 MAIN TAB
+------------------------------------------------------------
+local MainTab = Window:CreateTab("Main", 4483362458)
+MainTab:CreateSection("Auto Fishing Tools")
+
+-- 🟦 Teleport to Fishing Spot
+MainTab:CreateButton({
+    Name = "Teleport to Fishing Spot",
+    Callback = function()
+        local TARGET_POS = Vector3.new(-636.75, 36.38, 1416.01)
+        local FACE_DIR = Vector3.new(-0.11, 0, 0.99)
+        local player = game.Players.LocalPlayer
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(TARGET_POS, TARGET_POS + FACE_DIR)
+        end
+    end,
+})
+
+-- 🟩 Spam Cast
+MainTab:CreateToggle({
+    Name = "Auto Cast",
+    CurrentValue = false,
+    Flag = "SpamCast",
+    Callback = function(Value)
+        _G.SpamCastRunning = Value
+        task.spawn(function()
+            local player = game.Players.LocalPlayer
+            while _G.SpamCastRunning do
+                task.wait(0.5)
+                local char = player.Character or player.CharacterAdded:Wait()
+                local rod = char:FindFirstChild("BasicRod")
+                if rod and rod.Parent == char then
+                    pcall(function() rod:Activate() end)
+                end
+            end
+        end)
+    end,
+})
+
+-- 🟨 Auto Fish
+MainTab:CreateToggle({
+    Name = "Instant Reel Fish",
+    CurrentValue = false,
+    Flag = "AutoFish",
+    Callback = function(Value)
+        local Players = game:GetService("Players")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local LocalPlayer = Players.LocalPlayer
+
+        if Value then
+            _G.AutoFishRunning = true
+            task.spawn(function()
+                local function ensureRod()
+                    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                    if not char:FindFirstChild("BasicRod") and not LocalPlayer.Backpack:FindFirstChild("BasicRod") then
+                        ReplicatedStorage.RemoteEvents.ItemEquipped:FireServer("UniversalItems", "BasicRod")
+                        repeat task.wait(0.3) until char:FindFirstChild("BasicRod") or LocalPlayer.Backpack:FindFirstChild("BasicRod") or not _G.AutoFishRunning
+                    end
+                    local rodInBackpack = LocalPlayer.Backpack:FindFirstChild("BasicRod")
+                    if rodInBackpack then
+                        pcall(function()
+                            char:WaitForChild("Humanoid"):EquipTool(rodInBackpack)
+                        end)
+                    end
+                end
+
+                ensureRod()
+
+                local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                local rod = char:WaitForChild("BasicRod", 5)
+                if not rod then return end
+
+                local MiniGame = rod:WaitForChild("MiniGame")
+
+                MiniGame.OnClientEvent:Connect(function(action)
+                    if not _G.AutoFishRunning then return end
+                    if action == "Start" then
+                        task.wait(0.1)
+                        pcall(function() MiniGame:FireServer("Complete") end)
+                        local gui = LocalPlayer:FindFirstChild("PlayerGui"):FindFirstChild("FishingMinigameGui")
+                        if gui then gui:Destroy() end
+                    end
+                end)
+
+                while _G.AutoFishRunning do
+                    task.wait(1)
+                    local char = LocalPlayer.Character
+                    if not char then continue end
+                    local rodInChar = char:FindFirstChild("BasicRod")
+                    local rodInBackpack = LocalPlayer.Backpack:FindFirstChild("BasicRod")
+
+                    if not rodInChar and rodInBackpack then
+                        pcall(function() char.Humanoid:EquipTool(rodInBackpack) end)
+                    elseif not rodInChar and not rodInBackpack then
+                        ReplicatedStorage.RemoteEvents.ItemEquipped:FireServer("UniversalItems", "BasicRod")
+                        task.wait(1)
+                    end
+                end
+            end)
+        else
+            _G.AutoFishRunning = false
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("BasicRod") then
+                pcall(function() char.Humanoid:UnequipTools() end)
+            end
+        end
+    end,
+})
+
+-- 🐟 Auto Sell Toggle
+local AutoSellToggle = Tab:CreateToggle({
+    Name = "Auto Sell Fish",
+    CurrentValue = false,
+    Flag = "ToggleAutoSell",
+    Callback = function(Value)
+        local Players = game:GetService("Players")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local LocalPlayer = Players.LocalPlayer
+        local Backpack = LocalPlayer:WaitForChild("Backpack")
+
+        if Value then
+            _G.AutoSellRunning = true
+
+            -- Function to check and sell if any fish exists
+            local function checkAndSell()
+                if not _G.AutoSellRunning then return end
+                for _, item in pairs(Backpack:GetChildren()) do
+                    if item:IsA("Tool") and item.Name:lower():find("fish") then
+                        pcall(function()
+                            ReplicatedStorage.UnoStudio.SellAllEvent:FireServer()
+                        end)
+                        break
+                    end
+                end
+            end
+
+            -- Sell immediately if already have fish
+            checkAndSell()
+
+            -- Detect new items added to Backpack
+            _G.FishConnection = Backpack.ChildAdded:Connect(function(child)
+                task.wait(0.1)
+                if child:IsA("Tool") and child.Name:lower():find("fish") then
+                    checkAndSell()
+                end
+            end)
+
+        else
+            _G.AutoSellRunning = false
+            if _G.FishConnection then
+                _G.FishConnection:Disconnect()
+                _G.FishConnection = nil
+            end
+        end
+    end,
+})
+
+------------------------------------------------------------
+-- 🏪 SHOP TAB
+------------------------------------------------------------
+local ShopTab = Window:CreateTab("Shop", 4483362458)
+ShopTab:CreateSection("Shop Actions")
+
+ShopTab:CreateButton({
+    Name = "Sell All Fish",
+    Callback = function()
+        game:GetService("ReplicatedStorage").UnoStudio.SellAllEvent:FireServer()
+    end,
+})
+
+ShopTab:CreateButton({
+    Name = "Teleport to Shop",
+    Callback = function()
+        local SHOP_POS = Vector3.new(-600, 36, 1350)
+        local player = game.Players.LocalPlayer
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = CFrame.new(SHOP_POS) end
+    end,
+})
+
+------------------------------------------------------------
+-- ⚙️ UTILITY TAB
+------------------------------------------------------------
+local UtilityTab = Window:CreateTab("Utility", 4483362458)
+UtilityTab:CreateSection("Player Controls")
+
+-- WalkSpeed
+UtilityTab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {16, 150},
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Flag = "WalkSpeedSlider",
+    Callback = function(Value)
+        local player = game.Players.LocalPlayer
+        if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+            player.Character.Humanoid.WalkSpeed = Value
+        end
+    end,
+})
+
+-- JumpPower
+UtilityTab:CreateSlider({
+    Name = "JumpPower",
+    Range = {50, 200},
+    Increment = 5,
+    Suffix = "Jump",
+    CurrentValue = 50,
+    Flag = "JumpPowerSlider",
+    Callback = function(Value)
+        local player = game.Players.LocalPlayer
+        if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+            player.Character.Humanoid.JumpPower = Value
+        end
+    end,
+})
+
+-- Fly
+UtilityTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Flag = "FlyToggle",
+    Callback = function(Value)
+        local player = game.Players.LocalPlayer
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:WaitForChild("HumanoidRootPart")
+
+        if Value then
+            _G.Flying = true
+            task.spawn(function()
+                local flySpeed = 50
+                local UIS = game:GetService("UserInputService")
+                while _G.Flying and hrp do
+                    local moveDir = Vector3.zero
+                    if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir += hrp.CFrame.LookVector end
+                    if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir -= hrp.CFrame.LookVector end
+                    if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir -= hrp.CFrame.RightVector end
+                    if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir += hrp.CFrame.RightVector end
+                    hrp.Velocity = moveDir * flySpeed
+                    task.wait()
+                end
+                if hrp then hrp.Velocity = Vector3.zero end
+            end)
+        else
+            _G.Flying = false
+        end
+    end,
+})
+
+-- Anti AFK
+UtilityTab:CreateToggle({
+    Name = "Anti AFK",
+    CurrentValue = false,
+    Flag = "AntiAFK",
+    Callback = function(Value)
+        if Value then
+            _G.AntiAFK = true
+            task.spawn(function()
+                while _G.AntiAFK do
+                    game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                    task.wait(30)
+                end
+            end)
+        else
+            _G.AntiAFK = false
+        end
+    end,
+})
+
+-- Rejoin & Reset
+UtilityTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
+    end,
+})
+
+UtilityTab:CreateButton({
+    Name = "Reset Character",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        player.Character:BreakJoints()
+    end,
+})
+
+Rayfield:LoadConfiguration()
